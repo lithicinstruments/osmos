@@ -2,7 +2,7 @@
  * Harmonic Oscillator for ESP32-based microcontroller to generate a sine wave and six additional harmonics,
  * controllable via a digital encoder. Displays resulting waveforms on a 128x128 SSD1351-based display,
  * with selectable base frequency and musical scales.
- * 
+ *
  * Author: Tyler Reckart (tyler.reckart@gmail.com)
  * Copyright 2024
  *
@@ -12,10 +12,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -68,7 +68,7 @@ int sampleIndex = 0;
 float sineTable[numSamples];
 
 // Menu and scale settings
-enum MenuMode { SCALE_MENU, FREQUENCY_MENU, HARMONIC_MENU, MODULATION_MENU, PANNING_MENU, CV_MENU, AMPLITUDE_MENU, WAVEFORM_MENU };
+enum MenuMode { SCALE_MENU, FREQUENCY_MENU, HARMONIC_MENU, MODULATION_MENU, PANNING_MENU, CV_MENU, AMPLITUDE_MENU, WAVEFORM_MENU, PARTICLE_DISPLAY, XY_DISPLAY, RIPPLE_DISPLAY, OSCILLOSCOPE_DISPLAY };
 MenuMode currentMenu = SCALE_MENU;
 int menuIndex = 0;
 bool inMenu = false;
@@ -87,6 +87,11 @@ CVMode cvAssignments[4] = {NONE, NONE, NONE, NONE};
 // Base waveform type
 enum WaveformType { SINE, SAW, TRIANGLE, PULSE };
 WaveformType currentWaveform = SINE;
+
+// XY Oscilloscope settings
+bool xySwapped = false;
+float xyBiasX = 0.0;
+float xyBiasY = 0.0;
 
 // Timer interrupt service routine to generate waveforms
 void IRAM_ATTR onTimer() {
@@ -236,8 +241,8 @@ void loop() {
     static int lastMenuPos = 0;
     int newMenuPos = encoder.getPosition();
     if (newMenuPos != lastMenuPos) {
-      menuIndex = (menuIndex + (newMenuPos - lastMenuPos)) % 7;
-      if (menuIndex < 0) menuIndex += 7;
+      menuIndex = (menuIndex + (newMenuPos - lastMenuPos)) % 12; // Updated to 12 for new menu items
+      if (menuIndex < 0) menuIndex += 12;
       lastMenuPos = newMenuPos;
       drawMenu();
     }
@@ -263,6 +268,25 @@ void loop() {
         drawAmplitudeBars();
       } else if (currentMenu == WAVEFORM_MENU) {
         currentWaveform = (WaveformType)menuIndex;
+      } else if (currentMenu == PARTICLE_DISPLAY) {
+        drawParticles();
+      } else if (currentMenu == XY_DISPLAY) {
+        if (menuIndex == 0) {
+          xySwapped = !xySwapped;
+        } else if (menuIndex == 1) {
+          xyBiasX += 0.1;
+        } else if (menuIndex == 2) {
+          xyBiasX -= 0.1;
+        } else if (menuIndex == 3) {
+          xyBiasY += 0.1;
+        } else if (menuIndex == 4) {
+          xyBiasY -= 0.1;
+        }
+        drawXYOscilloscope();
+      } else if (currentMenu == RIPPLE_DISPLAY) {
+        drawRippleEffect();
+      } else if (currentMenu == OSCILLOSCOPE_DISPLAY) {
+        drawWaveformOscilloscope();
       }
       inMenu = false;
       drawWaveforms();
@@ -294,8 +318,18 @@ void loop() {
       lastButtonPress = millis();
     }
 
-    // Update the display
-    drawWaveforms();
+    // Update the display based on the current mode
+    if (currentMenu == PARTICLE_DISPLAY) {
+        drawParticles();
+    } else if (currentMenu == XY_DISPLAY) {
+        drawXYOscilloscope();
+    } else if (currentMenu == RIPPLE_DISPLAY) {
+        drawRippleEffect();
+    } else if (currentMenu == OSCILLOSCOPE_DISPLAY) {
+        drawWaveformOscilloscope();
+    } else {
+        drawWaveforms();
+    }
   }
 
   delay(100); // Update display every 100 ms

@@ -10,10 +10,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -26,6 +26,11 @@
  */
 
 #include "dac.h"
+#include <driver/dac.h>
+
+// Define the DAC output pins (DAC1: GPIO 25, DAC2: GPIO 26 for ESP32)
+#define DAC_PIN_1 25
+#define DAC_PIN_2 26
 
 // Create MCP4725 DAC instances
 Adafruit_MCP4725 dac1;
@@ -33,29 +38,35 @@ Adafruit_MCP4725 dac2;
 Adafruit_MCP4725 dacStereo;
 Adafruit_MCP4725 dacWave[7]; // DACs for individual wave outputs
 
-void initDACs() {
-  dac1.begin(0x60); // Default I2C address for MCP4725
-  dac2.begin(0x61); // Second I2C address for MCP4725
-  dacStereo.begin(0x62); // Third I2C address for MCP4725
-  for (int i = 0; i < 7; ++i) {
-    dacWave[i].begin(0x63 + i); // Assuming sequential I2C addresses for individual wave outputs
-  }
+void initDACs()
+{
+    dac_output_enable(DAC_PIN_1);
+    dac_output_enable(DAC_PIN_2);
+    dac1.begin(0x60);      // Default I2C address for MCP4725
+    dac2.begin(0x61);      // Second I2C address for MCP4725
+    dacStereo.begin(0x62); // Third I2C address for MCP4725
+    for (int i = 0; i < 7; ++i)
+    {
+        dacWave[i].begin(0x63 + i); // Assuming sequential I2C addresses for individual wave outputs
+    }
 }
 
-void outputToDACs(float leftSample, float rightSample, float stereoSample, float waveSamples[]) {
-  // Convert the sample values to DAC output range
-  int dacValueLeft = (int)((leftSample + 1.0) * 127.5); // Convert to 0-255 range
-  int dacValueRight = (int)((rightSample + 1.0) * 127.5); // Convert to 0-255 range
-  int dacValueStereo = (int)((stereoSample + 1.0) * 2047.5); // Convert to 0-4095 range
+void outputToDACs(float leftSample, float rightSample, float stereoSample, float waveSamples[])
+{
+    // Convert the sample values to DAC output range
+    int dacValueLeft = (int)((leftSample + 1.0) * 127.5);      // Convert to 0-255 range
+    int dacValueRight = (int)((rightSample + 1.0) * 127.5);    // Convert to 0-255 range
+    int dacValueStereo = (int)((stereoSample + 1.0) * 2047.5); // Convert to 0-4095 range
 
-  // Output the sample values to the DACs
-  dac_output_voltage(DAC_PIN_1, dacValueLeft);
-  dac_output_voltage(DAC_PIN_2, dacValueRight);
-  dacStereo.setVoltage(dacValueStereo, false);
+    // Output the sample values to the DACs
+    dac_output_voltage(DAC_PIN_1, dacValueLeft);
+    dac_output_voltage(DAC_PIN_2, dacValueRight);
+    dacStereo.setVoltage(dacValueStereo, false);
 
-  // Output individual wave samples to DACs
-  for (int i = 0; i < 7; ++i) {
-    int dacValueWave = (int)((waveSamples[i] + 1.0) * 2047.5); // Convert to 0-4095 range
-    dacWave[i].setVoltage(dacValueWave, false);
-  }
+    // Output individual wave samples to DACs
+    for (int i = 0; i < 7; ++i)
+    {
+        int dacValueWave = (int)((waveSamples[i] + 1.0) * 2047.5); // Convert to 0-4095 range
+        dacWave[i].setVoltage(dacValueWave, false);
+    }
 }

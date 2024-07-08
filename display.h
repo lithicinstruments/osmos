@@ -10,10 +10,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -32,15 +32,18 @@
 #include <Adafruit_SSD1305.h>
 
 // Define the display address and reset pin
-#define OLED_RESET    4
-#define OLED_ADDRESS  0x3D
+#define OLED_RESET 4
+#define OLED_ADDRESS 0x3D
 
 // Create SSD1305 display instance
 extern Adafruit_SSD1305 display;
 
 void initDisplay();
-void drawWaveforms();
 void drawAmplitudeBars();
 void drawMenu();
+void drawParticles();
+void drawXYOscilloscope();
+void drawRippleEffect();
+void drawWaveformOscilloscope();
 
 #endif
