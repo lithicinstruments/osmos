@@ -26,49 +26,24 @@
  *
  * See http://creativecommons.org/licenses/MIT/ for more information.
  */
-/*
- * Arduino program for ESP32-based microcontroller to generate a sine wave and six additional harmonics,
- * controllable via a digital encoder. Displays resulting waveforms on a 128x128 SSD1305-based display,
- * with selectable base frequency, musical scales, modulation sources, and CV inputs.
- * 
- * Author: Tyler Reckart of Lithic Instruments
- * Copyright 2024
- */
 
 #include <Arduino.h>
 #include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1305.h>
 #include <Adafruit_MCP4725.h>
 #include <RotaryEncoder.h>
+#include "display.h"
+#include "dac.h"
 
 // Define the rotary encoder pins
 #define ENCODER_PIN_A 32
 #define ENCODER_PIN_B 33
 #define ENCODER_BUTTON_PIN 34
 
-// Define the DAC output pins (DAC1: GPIO 25, DAC2: GPIO 26 for ESP32)
-#define DAC_PIN_1 25
-#define DAC_PIN_2 26
-
 // Define the ADC input pins for CV
 #define CV_PIN_1 34
 #define CV_PIN_2 35
 #define CV_PIN_3 36
 #define CV_PIN_4 39
-
-// OLED display pins
-#define OLED_RESET    4
-#define OLED_ADDRESS  0x3D // I2C address for the SSD1305 display
-
-// Create SSD1305 display instance
-Adafruit_SSD1305 display(128, 64, &Wire, OLED_RESET);
-
-// Create MCP4725 DAC instances
-Adafruit_MCP4725 dac1;
-Adafruit_MCP4725 dac2;
-Adafruit_MCP4725 dacStereo;
-Adafruit_MCP4725 dacWave[7]; // DACs for individual wave outputs
 
 // Create rotary encoder instance
 RotaryEncoder encoder(ENCODER_PIN_A, ENCODER_PIN_B, RotaryEncoder::LatchMode::FOUR3);
@@ -182,21 +157,8 @@ void IRAM_ATTR onTimer() {
     waveSamples[i] = harmonicSample; // Individual wave output
   }
 
-  // Convert the sample values to DAC output range
-  int dacValueLeft = (int)((leftSample + 1.0) * 127.5); // Convert to 0-255 range
-  int dacValueRight = (int)((rightSample + 1.0) * 127.5); // Convert to 0-255 range
-  int dacValueStereo = (int)((stereoSample + 1.0) * 2047.5); // Convert to 0-4095 range
-
   // Output the sample values to the DACs
-  dac_output_voltage(DAC_PIN_1, dacValueLeft);
-  dac_output_voltage(DAC_PIN_2, dacValueRight);
-  dacStereo.setVoltage(dacValueStereo, false);
-
-  // Output individual wave samples to DACs
-  for (int i = 0; i < 7; ++i) {
-    int dacValueWave = (int)((waveSamples[i] + 1.0) * 2047.5); // Convert to 0-4095 range
-    dacWave[i].setVoltage(dacValueWave, false);
-  }
+  outputToDACs(leftSample, rightSample, stereoSample, waveSamples);
 
   // Increment the sample index
   sampleIndex = (sampleIndex + 1) % numSamples;
@@ -207,22 +169,10 @@ void setup() {
   Serial.begin(115200);
 
   // Initialize the DACs
-  dac_output_enable(DAC_PIN_1);
-  dac_output_enable(DAC_PIN_2);
+  initDACs();
 
-  // Initialize the external DACs
-  dac1.begin(0x60); // Default I2C address for MCP4725
-  dac2.begin(0x61); // Second I2C address for MCP4725
-  dacStereo.begin(0x62); // Third I2C address for MCP4725
-  for (int i = 0; i < 7; ++i) {
-    dacWave[i].begin(0x63 + i); // Assuming sequential I2C addresses for individual wave outputs
-  }
-
-  // Initialize the OLED display
-  display.begin(SSD1305_SWITCHCAPVCC, OLED_ADDRESS);
-  display.display(); // Initialize with a blank display
-  delay(1000); // Pause for 1 second
-  display.clearDisplay();
+  // Initialize the display
+  initDisplay();
 
   // Generate the sine wave table
   for (int i = 0; i < numSamples; ++i) {
@@ -276,148 +226,6 @@ void quantizeHarmonics() {
   for (int i = 0; i < 7; ++i) {
     harmonicAmplitudes[i] = selectedScale[i];
   }
-}
-
-// Draw the waveforms on the OLED display
-void drawWaveforms() {
-  display.clearDisplay();
-
-  // Draw the combined waveform
-  for (int x = 0; x < 128; ++x) {
-    float sample = 0.0;
-    for (int i = 0; i < 7; ++i) {
-      sample += harmonicAmplitudes[i] * sin(2.0 * PI * (i + 1) * x / 128.0);
-    }
-    int y = 32 + (int)(sample * 16); // Center at 32, scale to 16 pixels
-    display.drawPixel(x, y, WHITE);
-  }
-
-  // Display harmonic amplitudes and the current scale
-  for (int i = 0; i < 7; ++i) {
-    display.setCursor(0, i * 8);
-    display.print("H");
-    display.print(i + 1);
-    display.print(": ");
-    display.print(harmonicAmplitudes[i], 1);
-    if (i == harmonicIndex) {
-      display.print(" <-");
-    }
-  }
-
-  display.setCursor(0, 56);
-  display.print("Scale: ");
-  display.print(scaleNames[currentMenu]);
-  display.setCursor(64, 56);
-  display.print("Freq: ");
-  display.print(baseFrequency, 1);
-  display.display();
-}
-
-// Draw the amplitude bars for each harmonic
-void drawAmplitudeBars() {
-  display.clearDisplay();
-  
-  for (int i = 0; i < 7; ++i) {
-    int barHeight = (int)(harmonicAmplitudes[i] * 64);
-    display.fillRect(i * 18, 64 - barHeight, 16, barHeight, WHITE);
-    display.setCursor(i * 18, 64 - barHeight - 8);
-    display.print(i + 1);
-  }
-  display.display();
-}
-
-// Draw the menu on the OLED display
-void drawMenu() {
-  display.clearDisplay();
-  display.setCursor(0, 0);
-  
-  if (currentMenu == SCALE_MENU) {
-    display.print("Select Scale:");
-    for (int i = 0; i < 4; ++i) {
-      display.setCursor(0, (i + 1) * 8);
-      display.print(scaleNames[i]);
-      if (i == menuIndex) {
-        display.print(" <-");
-      }
-    }
-  } else if (currentMenu == FREQUENCY_MENU) {
-    display.print("Select Base Freq:");
-    for (int i = 0; i < 4; ++i) {
-      display.setCursor(0, (i + 1) * 8);
-      display.print(baseFrequencies[i], 1);
-      if (i == menuIndex) {
-        display.print(" <-");
-      }
-    }
-  } else if (currentMenu == MODULATION_MENU) {
-    display.print("Modulate H");
-    display.print(harmonicIndex + 1);
-    display.print(" with:");
-    for (int i = 0; i < 7; ++i) {
-      display.setCursor(0, (i + 1) * 8);
-      display.print("H");
-      display.print(i + 1);
-      display.print(": ");
-      display.print(modulationMatrix[i][harmonicIndex], 1);
-      if (i == menuIndex) {
-        display.print(" <-");
-      }
-    }
-  } else if (currentMenu == PANNING_MENU) {
-    display.print("Panning H");
-    display.print(harmonicIndex + 1);
-    for (int i = 0; i < 7; ++i) {
-      display.setCursor(0, (i + 1) * 8);
-      display.print("H");
-      display.print(i + 1);
-      display.print(": ");
-      display.print(harmonicPanning[i], 1);
-      if (i == menuIndex) {
-        display.print(" <-");
-      }
-    }
-  } else if (currentMenu == CV_MENU) {
-    display.print("CV Assignments:");
-    for (int i = 0; i < 4; ++i) {
-      display.setCursor(0, (i + 1) * 8);
-      display.print("CV");
-      display.print(i + 1);
-      display.print(": ");
-      switch (cvAssignments[i]) {
-        case NONE:
-          display.print("None");
-          break;
-        case LIN_FM:
-          display.print("Linear FM");
-          break;
-        case EXP_FM:
-          display.print("Exponential FM");
-          break;
-        case AMPLITUDE:
-          display.print("Amplitude");
-          break;
-        case PITCH_1V_OCT:
-          display.print("Pitch (1V/oct)");
-          break;
-      }
-      if (i == menuIndex) {
-        display.print(" <-");
-      }
-    }
-  } else if (currentMenu == AMPLITUDE_MENU) {
-    display.print("Amplitude Control:");
-    drawAmplitudeBars();
-  } else if (currentMenu == WAVEFORM_MENU) {
-    display.print("Select Waveform:");
-    for (int i = 0; i < 4; ++i) {
-      display.setCursor(0, (i + 1) * 8);
-      display.print(waveformNames[i]);
-      if (i == menuIndex) {
-        display.print(" <-");
-      }
-    }
-  }
-  display.display();
 }
 
 void loop() {
