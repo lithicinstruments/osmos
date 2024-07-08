@@ -26,11 +26,19 @@
  *
  * See http://creativecommons.org/licenses/MIT/ for more information.
  */
+/*
+ * Arduino program for ESP32-based microcontroller to generate a sine wave and six additional harmonics,
+ * controllable via a digital encoder. Displays resulting waveforms on a 128x128 SSD1305-based display,
+ * with selectable base frequency, musical scales, modulation sources, and CV inputs.
+ * 
+ * Author: Tyler Reckart of Lithic Instruments
+ * Copyright 2024
+ */
 
 #include <Arduino.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_SSD1351.h>
+#include <Adafruit_SSD1305.h>
 #include <Adafruit_MCP4725.h>
 #include <RotaryEncoder.h>
 
@@ -50,12 +58,11 @@
 #define CV_PIN_4 39
 
 // OLED display pins
-#define OLED_CS   15
-#define OLED_DC   2
-#define OLED_RST  4
+#define OLED_RESET    4
+#define OLED_ADDRESS  0x3D // I2C address for the SSD1305 display
 
-// Create SSD1351 display instance
-Adafruit_SSD1351 display = Adafruit_SSD1351(128, 128, &SPI, OLED_CS, OLED_DC, OLED_RST);
+// Create SSD1305 display instance
+Adafruit_SSD1305 display(128, 64, &Wire, OLED_RESET);
 
 // Create MCP4725 DAC instances
 Adafruit_MCP4725 dac1;
@@ -212,10 +219,10 @@ void setup() {
   }
 
   // Initialize the OLED display
-  display.begin();
-  display.fillScreen(BLACK);
-  display.setTextColor(WHITE);
-  display.setTextSize(1);
+  display.begin(SSD1305_SWITCHCAPVCC, OLED_ADDRESS);
+  display.display(); // Initialize with a blank display
+  delay(1000); // Pause for 1 second
+  display.clearDisplay();
 
   // Generate the sine wave table
   for (int i = 0; i < numSamples; ++i) {
@@ -273,7 +280,7 @@ void quantizeHarmonics() {
 
 // Draw the waveforms on the OLED display
 void drawWaveforms() {
-  display.fillScreen(BLACK);
+  display.clearDisplay();
 
   // Draw the combined waveform
   for (int x = 0; x < 128; ++x) {
@@ -281,13 +288,13 @@ void drawWaveforms() {
     for (int i = 0; i < 7; ++i) {
       sample += harmonicAmplitudes[i] * sin(2.0 * PI * (i + 1) * x / 128.0);
     }
-    int y = 64 + (int)(sample * 32); // Center at 64, scale to 32 pixels
+    int y = 32 + (int)(sample * 16); // Center at 32, scale to 16 pixels
     display.drawPixel(x, y, WHITE);
   }
 
   // Display harmonic amplitudes and the current scale
   for (int i = 0; i < 7; ++i) {
-    display.setCursor(0, i * 10);
+    display.setCursor(0, i * 8);
     display.print("H");
     display.print(i + 1);
     display.print(": ");
@@ -297,35 +304,37 @@ void drawWaveforms() {
     }
   }
 
-  display.setCursor(0, 70);
+  display.setCursor(0, 56);
   display.print("Scale: ");
   display.print(scaleNames[currentMenu]);
-  display.setCursor(0, 80);
-  display.print("Base Freq: ");
+  display.setCursor(64, 56);
+  display.print("Freq: ");
   display.print(baseFrequency, 1);
+  display.display();
 }
 
 // Draw the amplitude bars for each harmonic
 void drawAmplitudeBars() {
-  display.fillScreen(BLACK);
+  display.clearDisplay();
   
   for (int i = 0; i < 7; ++i) {
     int barHeight = (int)(harmonicAmplitudes[i] * 64);
-    display.fillRect(i * 18, 128 - barHeight, 16, barHeight, WHITE);
-    display.setCursor(i * 18, 128 - barHeight - 10);
+    display.fillRect(i * 18, 64 - barHeight, 16, barHeight, WHITE);
+    display.setCursor(i * 18, 64 - barHeight - 8);
     display.print(i + 1);
   }
+  display.display();
 }
 
 // Draw the menu on the OLED display
 void drawMenu() {
-  display.fillScreen(BLACK);
+  display.clearDisplay();
   display.setCursor(0, 0);
   
   if (currentMenu == SCALE_MENU) {
     display.print("Select Scale:");
     for (int i = 0; i < 4; ++i) {
-      display.setCursor(0, (i + 1) * 10);
+      display.setCursor(0, (i + 1) * 8);
       display.print(scaleNames[i]);
       if (i == menuIndex) {
         display.print(" <-");
@@ -334,7 +343,7 @@ void drawMenu() {
   } else if (currentMenu == FREQUENCY_MENU) {
     display.print("Select Base Freq:");
     for (int i = 0; i < 4; ++i) {
-      display.setCursor(0, (i + 1) * 10);
+      display.setCursor(0, (i + 1) * 8);
       display.print(baseFrequencies[i], 1);
       if (i == menuIndex) {
         display.print(" <-");
@@ -345,7 +354,7 @@ void drawMenu() {
     display.print(harmonicIndex + 1);
     display.print(" with:");
     for (int i = 0; i < 7; ++i) {
-      display.setCursor(0, (i + 1) * 10);
+      display.setCursor(0, (i + 1) * 8);
       display.print("H");
       display.print(i + 1);
       display.print(": ");
@@ -358,7 +367,7 @@ void drawMenu() {
     display.print("Panning H");
     display.print(harmonicIndex + 1);
     for (int i = 0; i < 7; ++i) {
-      display.setCursor(0, (i + 1) * 10);
+      display.setCursor(0, (i + 1) * 8);
       display.print("H");
       display.print(i + 1);
       display.print(": ");
@@ -370,7 +379,7 @@ void drawMenu() {
   } else if (currentMenu == CV_MENU) {
     display.print("CV Assignments:");
     for (int i = 0; i < 4; ++i) {
-      display.setCursor(0, (i + 1) * 10);
+      display.setCursor(0, (i + 1) * 8);
       display.print("CV");
       display.print(i + 1);
       display.print(": ");
@@ -401,13 +410,14 @@ void drawMenu() {
   } else if (currentMenu == WAVEFORM_MENU) {
     display.print("Select Waveform:");
     for (int i = 0; i < 4; ++i) {
-      display.setCursor(0, (i + 1) * 10);
+      display.setCursor(0, (i + 1) * 8);
       display.print(waveformNames[i]);
       if (i == menuIndex) {
         display.print(" <-");
       }
     }
   }
+  display.display();
 }
 
 void loop() {
