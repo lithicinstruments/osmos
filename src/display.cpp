@@ -28,21 +28,20 @@
 #include "display.h"
 #include <Arduino.h> // For random function
 
-// Create SSD1305 display instance
-Adafruit_SSD1305 display(128, 64, &Wire, OLED_RESET);
-
-extern const char *scaleNames[];
-extern const char *waveformNames[];
+extern Adafruit_SSD1305 display;
 extern float harmonicAmplitudes[];
+extern float harmonicPanning[];
 extern float baseFrequency;
-extern MenuMode currentMenu;
 extern int harmonicIndex;
 extern int menuIndex;
+extern MenuMode currentMenu;
 extern float modulationMatrix[7][7];
-extern CVMode cvAssignments[4];
+extern CVMode cvAssignments[];
 extern bool xySwapped;
 extern float xyBiasX;
 extern float xyBiasY;
+extern const char *scaleNames[];
+extern const char *waveformNames[];
 
 struct Particle
 {
@@ -76,14 +75,40 @@ void initDisplay()
     // Initialize particles
     for (int i = 0; i < MAX_PARTICLES; ++i)
     {
-        particles[i] = {random(128), random(64), random(3) - 1, random(3) - 1, YELLOW};
+        particles[i] = {random(128), random(64), random(3) - 1, random(3) - 1, WHITE};
     }
 
     // Initialize ripples
     for (int i = 0; i < MAX_RIPPLES; ++i)
     {
-        ripples[i] = {random(128), random(64), 0, random(1, 5) / 10.0, harmonicAmplitudes[i % 7]};
+        ripples[i] = {random(128), random(64), 0, random(1, 5) / 10.0, harmonicAmplitudes[i % 7], 1.0};
     }
+}
+
+void drawPopupMenu(int index)
+{
+    display.clearDisplay();
+    const char *popupItems[] = {"Option 1", "Option 2", "Option 3", "Option 4", "Option 5", "Option 6", "Option 7"};
+    for (int i = 0; i < 7; ++i)
+    {
+        display.setCursor(0, i * 8);
+        if (i == index)
+        {
+            display.print("> ");
+        }
+        else
+        {
+            display.print("  ");
+        }
+        display.print(popupItems[i]);
+    }
+    display.display();
+}
+
+void handlePopupSelection(int index)
+{
+    // Handle the selected option from the popup menu
+    // Add your option handling code here
 }
 
 void drawWaveforms()
@@ -99,7 +124,7 @@ void drawWaveforms()
             sample += harmonicAmplitudes[i] * sin(2.0 * PI * (i + 1) * x / 128.0);
         }
         int y = 32 + (int)(sample * 16); // Center at 32, scale to 16 pixels
-        display.drawPixel(x, y, YELLOW);
+        display.drawPixel(x, y, WHITE);
     }
 
     // Display harmonic amplitudes and the current scale
@@ -132,7 +157,7 @@ void drawAmplitudeBars()
     for (int i = 0; i < 7; ++i)
     {
         int barHeight = (int)(harmonicAmplitudes[i] * 64);
-        display.fillRect(i * 18, 64 - barHeight, 16, barHeight, YELLOW);
+        display.fillRect(i * 18, 64 - barHeight, 16, barHeight, WHITE);
         display.setCursor(i * 18, 64 - barHeight - 8);
         display.print(i + 1);
     }
@@ -299,7 +324,6 @@ void drawParticles()
         // Draw particle
         display.drawPixel(particles[i].x, particles[i].y, particles[i].color);
     }
-
     display.display();
 }
 
@@ -307,32 +331,49 @@ void drawXYOscilloscope()
 {
     display.clearDisplay();
 
+    float x_signal[numSamples];
+    float y_signal[numSamples];
+
     for (int i = 0; i < numSamples; ++i)
     {
-        int x = (int)((sineTable[i] + xyBiasX) * 64) + 64;
-        int y = (int)((sineTable[(i + 64) % numSamples] + xyBiasY) * 32) + 32;
+        x_signal[i] = sin(2.0 * PI * i / numSamples);
+        y_signal[i] = cos(2.0 * PI * i / numSamples);
+    }
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        int x = (x_signal[i] + xyBiasX) * (128 / 2) + (128 / 2);
+        int y = (y_signal[i] + xyBiasY) * (64 / 2) + (64 / 2);
+
         if (xySwapped)
         {
             int temp = x;
             x = y;
             y = temp;
         }
-        display.drawPixel(x, y, YELLOW);
+
+        if (x >= 0 && x < 128 && y >= 0 && y < 64)
+        {
+            display.drawPixel(x, y, WHITE);
+        }
     }
 
     display.display();
 }
 
-void drawRippleEffect() {
+void drawRippleEffect()
+{
     display.clearDisplay();
 
-    for (int i = 0; i < MAX_RIPPLES; ++i) {
-        Ripple& ripple = ripples[i];
-        
+    for (int i = 0; i < MAX_RIPPLES; ++i)
+    {
+        Ripple &ripple = ripples[i];
+
         ripple.radius += ripple.speed;
         ripple.life -= 0.05;
-        
-        if (ripple.life <= 0) {
+
+        if (ripple.life <= 0)
+        {
             ripple.radius = 0;
             ripple.x = random(128);
             ripple.y = random(64);
@@ -341,12 +382,14 @@ void drawRippleEffect() {
             ripple.life = 1.0;
         }
 
-        for (int angle = 0; angle < 360; ++angle) {
+        for (int angle = 0; angle < 360; ++angle)
+        {
             float rad = radians(angle);
             int x = int(ripple.x + ripple.radius * cos(rad));
             int y = int(ripple.y + ripple.radius * sin(rad));
-            if (x >= 0 && x < 128 && y >= 0 && y < 64) {
-                display.drawPixel(x, y, YELLOW * ripple.life);
+            if (x >= 0 && x < 128 && y >= 0 && y < 64)
+            {
+                display.drawPixel(x, y, WHITE * ripple.life);
             }
         }
     }
@@ -366,8 +409,15 @@ void drawWaveformOscilloscope()
             sample += harmonicAmplitudes[i] * sin(2.0 * PI * (i + 1) * x / 128.0);
         }
         int y = 32 + (int)(sample * 16); // Center at 32, scale to 16 pixels
-        display.drawPixel(x, y, YELLOW);
+        display.drawPixel(x, y, WHITE);
     }
 
+    display.display();
+}
+
+// Function to draw the bitmap on the display
+void drawBitmap(const unsigned char *bitmap, uint8_t w, uint8_t h) {
+    display.clearDisplay();
+    display.drawBitmap((display.width() - w) / 2, (display.height() - h) / 2, bitmap, w, h, SSD1305_YELLOW);
     display.display();
 }
