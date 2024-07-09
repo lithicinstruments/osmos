@@ -60,6 +60,7 @@ struct Ripple
     float radius;
     float speed;
     float amplitude;
+    float life;
 };
 
 #define MAX_RIPPLES 10
@@ -75,7 +76,7 @@ void initDisplay()
     // Initialize particles
     for (int i = 0; i < MAX_PARTICLES; ++i)
     {
-        particles[i] = {random(128), random(64), random(3) - 1, random(3) - 1, WHITE};
+        particles[i] = {random(128), random(64), random(3) - 1, random(3) - 1, YELLOW};
     }
 
     // Initialize ripples
@@ -98,7 +99,7 @@ void drawWaveforms()
             sample += harmonicAmplitudes[i] * sin(2.0 * PI * (i + 1) * x / 128.0);
         }
         int y = 32 + (int)(sample * 16); // Center at 32, scale to 16 pixels
-        display.drawPixel(x, y, WHITE);
+        display.drawPixel(x, y, YELLOW);
     }
 
     // Display harmonic amplitudes and the current scale
@@ -131,7 +132,7 @@ void drawAmplitudeBars()
     for (int i = 0; i < 7; ++i)
     {
         int barHeight = (int)(harmonicAmplitudes[i] * 64);
-        display.fillRect(i * 18, 64 - barHeight, 16, barHeight, WHITE);
+        display.fillRect(i * 18, 64 - barHeight, 16, barHeight, YELLOW);
         display.setCursor(i * 18, 64 - barHeight - 8);
         display.print(i + 1);
     }
@@ -316,30 +317,37 @@ void drawXYOscilloscope()
             x = y;
             y = temp;
         }
-        display.drawPixel(x, y, WHITE);
+        display.drawPixel(x, y, YELLOW);
     }
 
     display.display();
 }
 
-void drawRippleEffect()
-{
+void drawRippleEffect() {
     display.clearDisplay();
 
-    for (int i = 0; i < MAX_RIPPLES; ++i)
-    {
-        if (ripples[i].amplitude > 0)
-        {
-            ripples[i].radius += ripples[i].speed;
-            if (ripples[i].radius > 64)
-            {
-                ripples[i].radius = 0;
-                ripples[i].x = random(128);
-                ripples[i].y = random(64);
-                ripples[i].speed = random(1, 5) / 10.0;
-                ripples[i].amplitude = harmonicAmplitudes[random(7)];
+    for (int i = 0; i < MAX_RIPPLES; ++i) {
+        Ripple& ripple = ripples[i];
+        
+        ripple.radius += ripple.speed;
+        ripple.life -= 0.05;
+        
+        if (ripple.life <= 0) {
+            ripple.radius = 0;
+            ripple.x = random(128);
+            ripple.y = random(64);
+            ripple.speed = random(1, 5) / 10.0;
+            ripple.amplitude = harmonicAmplitudes[random(7)];
+            ripple.life = 1.0;
+        }
+
+        for (int angle = 0; angle < 360; ++angle) {
+            float rad = radians(angle);
+            int x = int(ripple.x + ripple.radius * cos(rad));
+            int y = int(ripple.y + ripple.radius * sin(rad));
+            if (x >= 0 && x < 128 && y >= 0 && y < 64) {
+                display.drawPixel(x, y, YELLOW * ripple.life);
             }
-            display.drawCircle(ripples[i].x, ripples[i].y, (int)ripples[i].radius, WHITE);
         }
     }
 
@@ -358,7 +366,7 @@ void drawWaveformOscilloscope()
             sample += harmonicAmplitudes[i] * sin(2.0 * PI * (i + 1) * x / 128.0);
         }
         int y = 32 + (int)(sample * 16); // Center at 32, scale to 16 pixels
-        display.drawPixel(x, y, WHITE);
+        display.drawPixel(x, y, YELLOW);
     }
 
     display.display();

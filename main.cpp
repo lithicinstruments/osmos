@@ -1,6 +1,6 @@
 /*
- * Harmonic Oscillator for ESP32-based microcontroller to generate a sine wave and six additional harmonics,
- * controllable via a digital encoder. Displays resulting waveforms on a 128x128 SSD1351-based display,
+ * Harmonic oscillator for ESP32-based microcontroller to generate a sine wave and six additional harmonics,
+ * controllable via a digital encoder. Displays resulting waveforms on a 128x64 Adafruit_SSD1305-based display,
  * with selectable base frequency and musical scales.
  *
  * Author: Tyler Reckart (tyler.reckart@gmail.com)
@@ -68,10 +68,11 @@ int sampleIndex = 0;
 float sineTable[numSamples];
 
 // Menu and scale settings
-enum MenuMode { SCALE_MENU, FREQUENCY_MENU, HARMONIC_MENU, MODULATION_MENU, PANNING_MENU, CV_MENU, AMPLITUDE_MENU, WAVEFORM_MENU, PARTICLE_DISPLAY, XY_DISPLAY, RIPPLE_DISPLAY, OSCILLOSCOPE_DISPLAY };
-MenuMode currentMenu = SCALE_MENU;
+enum MenuMode { SCALE_MENU, FREQUENCY_MENU, HARMONIC_MENU, MODULATION_MENU, PANNING_MENU, CV_MENU, AMPLITUDE_MENU, WAVEFORM_MENU, PARTICLE_DISPLAY, XY_DISPLAY, RIPPLE_DISPLAY, OSCILLOSCOPE_DISPLAY, DEFAULT_VIEW };
+MenuMode currentMenu = DEFAULT_VIEW;
 int menuIndex = 0;
 bool inMenu = false;
+bool inPopupMenu = false;
 
 const char* scaleNames[] = {"Major", "Minor", "Natural Harmonic", "Pentatonic"};
 const float baseFrequencies[] = {220.0, 440.0, 880.0, 1760.0};
@@ -250,85 +251,49 @@ void loop() {
     // Select menu item with encoder button
     static unsigned long lastButtonPress = 0;
     if (digitalRead(ENCODER_BUTTON_PIN) == LOW && millis() - lastButtonPress > 300) {
-      if (currentMenu == SCALE_MENU) {
-        currentMenu = (MenuMode)menuIndex;
-        quantizeHarmonics();
-      } else if (currentMenu == FREQUENCY_MENU) {
-        baseFrequency = baseFrequencies[menuIndex];
-      } else if (currentMenu == MODULATION_MENU) {
-        modulationMatrix[menuIndex][harmonicIndex] += 0.1;
-        modulationMatrix[menuIndex][harmonicIndex] = constrain(modulationMatrix[menuIndex][harmonicIndex], 0.0, 1.0);
-      } else if (currentMenu == PANNING_MENU) {
-        harmonicPanning[menuIndex] += 0.1;
-        harmonicPanning[menuIndex] = constrain(harmonicPanning[menuIndex], 0.0, 1.0);
-      } else if (currentMenu == CV_MENU) {
-        cvAssignments[menuIndex] = (CVMode)((cvAssignments[menuIndex] + 1) % 5);
-      } else if (currentMenu == AMPLITUDE_MENU) {
-        harmonicAmplitudes[menuIndex] = constrain(harmonicAmplitudes[menuIndex] + 0.1, 0.0, 1.0);
-        drawAmplitudeBars();
-      } else if (currentMenu == WAVEFORM_MENU) {
-        currentWaveform = (WaveformType)menuIndex;
-      } else if (currentMenu == PARTICLE_DISPLAY) {
-        drawParticles();
-      } else if (currentMenu == XY_DISPLAY) {
-        if (menuIndex == 0) {
-          xySwapped = !xySwapped;
-        } else if (menuIndex == 1) {
-          xyBiasX += 0.1;
-        } else if (menuIndex == 2) {
-          xyBiasX -= 0.1;
-        } else if (menuIndex == 3) {
-          xyBiasY += 0.1;
-        } else if (menuIndex == 4) {
-          xyBiasY -= 0.1;
-        }
-        drawXYOscilloscope();
-      } else if (currentMenu == RIPPLE_DISPLAY) {
-        drawRippleEffect();
-      } else if (currentMenu == OSCILLOSCOPE_DISPLAY) {
-        drawWaveformOscilloscope();
-      }
       inMenu = false;
-      drawWaveforms();
+      inPopupMenu = true;
       lastButtonPress = millis();
     }
+  } else if (inPopupMenu) {
+    // Handle popup menu interactions
+    // Implementation for each mode's options goes here
   } else {
-    // Adjust harmonic amplitude using the encoder
+    // Default view: loop through display modes
+    static int displayModeIndex = 0;
     static int lastPos = 0;
     int newPos = encoder.getPosition();
     if (newPos != lastPos) {
-      harmonicAmplitudes[harmonicIndex] += (newPos - lastPos) * 0.1;
-      harmonicAmplitudes[harmonicIndex] = constrain(harmonicAmplitudes[harmonicIndex], 0.0, 1.0);
+      displayModeIndex = (displayModeIndex + (newPos - lastPos)) % 12; // Number of display modes
+      if (displayModeIndex < 0) displayModeIndex += 12;
       lastPos = newPos;
-      Serial.printf("Harmonic %d amplitude: %.2f\n", harmonicIndex, harmonicAmplitudes[harmonicIndex]);
+
+      // Redraw the selected display mode
+      switch (displayModeIndex) {
+        case PARTICLE_DISPLAY:
+          drawParticles();
+          break;
+        case XY_DISPLAY:
+          drawXYOscilloscope();
+          break;
+        case RIPPLE_DISPLAY:
+          drawRippleEffect();
+          break;
+        case OSCILLOSCOPE_DISPLAY:
+          drawWaveformOscilloscope();
+          break;
+        default:
+          drawWaveforms();
+          break;
+      }
     }
 
-    // Change harmonic selection with encoder button
+    // Change to popup menu mode with long press of encoder button
     static unsigned long lastButtonPress = 0;
-    if (digitalRead(ENCODER_BUTTON_PIN) == LOW && millis() - lastButtonPress > 300) {
-      harmonicIndex = (harmonicIndex + 1) % 7;
-      Serial.printf("Selected harmonic: %d\n", harmonicIndex);
-      lastButtonPress = millis();
-    }
-
-    // Enter menu mode with long press of encoder button
     if (digitalRead(ENCODER_BUTTON_PIN) == LOW && millis() - lastButtonPress > 1000) {
       inMenu = true;
       drawMenu();
       lastButtonPress = millis();
-    }
-
-    // Update the display based on the current mode
-    if (currentMenu == PARTICLE_DISPLAY) {
-        drawParticles();
-    } else if (currentMenu == XY_DISPLAY) {
-        drawXYOscilloscope();
-    } else if (currentMenu == RIPPLE_DISPLAY) {
-        drawRippleEffect();
-    } else if (currentMenu == OSCILLOSCOPE_DISPLAY) {
-        drawWaveformOscilloscope();
-    } else {
-        drawWaveforms();
     }
   }
 
