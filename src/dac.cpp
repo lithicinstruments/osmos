@@ -25,8 +25,8 @@
  * See http://creativecommons.org/licenses/MIT/ for more information.
  */
 
-#include "dac.h"
-#include <driver/dac.h>
+#include "Dac.h"
+#include <driver/Dac.h>
 
 // Define the DAC output pins (DAC1: GPIO 25, DAC2: GPIO 26 for ESP32)
 #define DAC_PIN_1 25

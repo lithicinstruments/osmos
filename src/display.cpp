@@ -25,7 +25,7 @@
  * See http://creativecommons.org/licenses/MIT/ for more information.
  */
 
-#include "display.h"
+#include "Display.h"
 #include <Arduino.h> // For random function
 
 extern Adafruit_SSD1305 display;
